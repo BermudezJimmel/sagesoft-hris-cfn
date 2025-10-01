@@ -515,7 +515,6 @@ Resources:
   RDSSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
-      DBSubnetGroupName: sagesoft-hris-production-rds-subnet-group
       DBSubnetGroupDescription: Subnet group for Sagesoft HRIS RDS
       SubnetIds:
         - !Ref PrivateSubnet1
