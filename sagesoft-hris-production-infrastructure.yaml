@@ -5,7 +5,7 @@ Parameters:
   AMIId:
     Type: String
     Description: AMI ID for the EC2 instance (sagesoft-hris-production-ec2-GOLDEN-IMAGE-v2)
-    Default: ami-0abcdef1234567890
+    Default: ami-0ce40bd4273a45d61
   
   ACMCertificateArn:
     Type: String
