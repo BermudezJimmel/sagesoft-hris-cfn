@@ -123,3 +123,10 @@ AI PROMPT:
 * Tags: Organization=Sagesoft Solutions Inc., Name=ssi-roadshow-demo-lb, Environment=Production, Country=PH, Province=Metro Manila, Locality=San Juan City, Author=SSI Tech.
 * A WAF association to an existing Web ACL (ssi-roadshow-demo-waf).
 Make ACM certificate ARN and Web ACL ARN parameters.
+    - WAF SECTION
+    Create an AWS WAFv2 Web ACL for the Application Load Balancer with the following:
+* Scope: REGIONAL, Name: ssi-roadshow-demo-waf, Description: "WAF for SSI roadshow Demo Load Balancer", CloudWatch metric name: ssi-roadshow-demo-cloudwatchmetric.
+* Add AWS Managed Rule Groups: Amazon IP Reputation List, Core Rule Set, Known Bad Inputs, Linux OS, PHP application, SQL database.
+* Default action: Allow.
+* Associate the Web ACL with the ALB (ssi-roadshow-demo-lb).
+* Tags: Organization=Sagesoft Solutions Inc., Name=ssi-roadshow-demo-waf, Environment=Production.

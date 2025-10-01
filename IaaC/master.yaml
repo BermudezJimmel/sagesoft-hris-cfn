@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Master CloudFormation stack for complete infrastructure'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+  
+  AMIId:
+    Type: AWS::EC2::Image::Id
+    Description: AMI ID for EC2 instances
+  
+  DBSnapshotId:
+    Type: String
+    Description: RDS snapshot identifier
+  
+  DomainName:
+    Type: String
+    Description: Domain name for Route 53
+
+Resources:
+  NetworkingStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./networking.yaml
+      Parameters:
+        Environment: !Ref Environment
+
+  StorageStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: NetworkingStack
+    Properties:
+      TemplateURL: ./storage.yaml
+      Parameters:
+        Environment: !Ref Environment
+        VPCId: !GetAtt NetworkingStack.Outputs.VPCId
+        PrivateSubnets: !GetAtt NetworkingStack.Outputs.PrivateSubnets
+
+  DatabaseStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: NetworkingStack
+    Properties:
+      TemplateURL: ./database.yaml
+      Parameters:
+        Environment: !Ref Environment
+        VPCId: !GetAtt NetworkingStack.Outputs.VPCId
+        PrivateSubnets: !GetAtt NetworkingStack.Outputs.PrivateSubnets
+        DBSnapshotId: !Ref DBSnapshotId
+
+  ComputeStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: [NetworkingStack, StorageStack, DatabaseStack]
+    Properties:
+      TemplateURL: ./compute.yaml
+      Parameters:
+        Environment: !Ref Environment
+        VPCId: !GetAtt NetworkingStack.Outputs.VPCId
+        PrivateSubnets: !GetAtt NetworkingStack.Outputs.PrivateSubnets
+        AMIId: !Ref AMIId
+        EFSId: !GetAtt StorageStack.Outputs.EFSId
+
+  LoadBalancerStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: [NetworkingStack, ComputeStack]
+    Properties:
+      TemplateURL: ./lb-waf.yaml
+      Parameters:
+        Environment: !Ref Environment
+        VPCId: !GetAtt NetworkingStack.Outputs.VPCId
+        PublicSubnets: !GetAtt NetworkingStack.Outputs.PublicSubnets
+        AutoScalingGroup: !GetAtt ComputeStack.Outputs.AutoScalingGroup
+
+  DNSStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: LoadBalancerStack
+    Properties:
+      TemplateURL: ./dns.yaml
+      Parameters:
+        Environment: !Ref Environment
+        DomainName: !Ref DomainName
+        LoadBalancerDNS: !GetAtt LoadBalancerStack.Outputs.LoadBalancerDNS
+        LoadBalancerZoneId: !GetAtt LoadBalancerStack.Outputs.LoadBalancerZoneId
+
+Outputs:
+  VPCId:
+    Value: !GetAtt NetworkingStack.Outputs.VPCId
+  LoadBalancerURL:
+    Value: !GetAtt LoadBalancerStack.Outputs.LoadBalancerDNS
+  DomainURL:
+    Value: !Sub "https://${DomainName}"

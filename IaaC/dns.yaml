@@ -1,0 +1,56 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'DNS infrastructure - Route 53'
+
+Parameters:
+  Environment:
+    Type: String
+  DomainName:
+    Type: String
+  LoadBalancerDNS:
+    Type: String
+  LoadBalancerZoneId:
+    Type: String
+
+Resources:
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref DomainName
+      HostedZoneConfig:
+        Comment: !Sub "Hosted zone for ${Environment} environment"
+      HostedZoneTags:
+        - Key: Name
+          Value: !Sub "${Environment}-hosted-zone"
+
+  DNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !Ref LoadBalancerDNS
+        HostedZoneId: !Ref LoadBalancerZoneId
+        EvaluateTargetHealth: true
+
+  WWWRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZone
+      Name: !Sub "www.${DomainName}"
+      Type: A
+      AliasTarget:
+        DNSName: !Ref LoadBalancerDNS
+        HostedZoneId: !Ref LoadBalancerZoneId
+        EvaluateTargetHealth: true
+
+Outputs:
+  HostedZoneId:
+    Value: !Ref HostedZone
+    Export:
+      Name: !Sub "${Environment}-HostedZoneId"
+
+  NameServers:
+    Value: !Join [',', !GetAtt HostedZone.NameServers]
+    Export:
+      Name: !Sub "${Environment}-NameServers"
