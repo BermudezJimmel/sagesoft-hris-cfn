@@ -1,0 +1,689 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Sagesoft HRIS Production Infrastructure - Complete Stack'
+
+Parameters:
+  ACMCertificateArn:
+    Type: String
+    Description: ARN of the ACM certificate for *.ssi-test.link
+    Default: arn:aws:acm:us-east-2:123456789012:certificate/57ebe126-9b78-439b-930c-56b1d068774d
+  
+  WebACLArn:
+    Type: String
+    Description: ARN of the existing Web ACL for WAF
+    Default: arn:aws:wafv2:us-east-2:123456789012:regional/webacl/ssi-roadshow-demo-waf/12345678-1234-1234-1234-123456789012
+
+Resources:
+  # VPC Section
+  SagesoftHRISVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/26
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-vpc
+        - Key: Organization
+          Value: Sagesoft
+        - Key: Environment
+          Value: Demo
+        - Key: Country Name
+          Value: PH
+        - Key: Province Name
+          Value: Metro Manila
+        - Key: Locality Name
+          Value: San Juan City
+        - Key: Author
+          Value: SSI Tech
+
+  # Internet Gateway
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-igw
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref SagesoftHRISVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Public Subnets
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SagesoftHRISVPC
+      CidrBlock: 10.0.0.0/28
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-public-subnet-1
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SagesoftHRISVPC
+      CidrBlock: 10.0.0.16/28
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-public-subnet-2
+
+  # Private Subnets
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SagesoftHRISVPC
+      CidrBlock: 10.0.0.32/28
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-private-subnet-1
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref SagesoftHRISVPC
+      CidrBlock: 10.0.0.48/28
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-private-subnet-2
+
+  # Route Tables
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref SagesoftHRISVPC
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-public-rt
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref SagesoftHRISVPC
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-private-rt
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  # Route Table Associations
+  PublicSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  # S3 VPC Endpoint
+  S3VPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref SagesoftHRISVPC
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PublicRouteTable
+        - !Ref PrivateRouteTable
+
+  # Network ACL
+  SagesoftHRISNetworkAcl:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId: !Ref SagesoftHRISVPC
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-acl
+        - Key: Organization
+          Value: Sagesoft
+        - Key: Environment
+          Value: Demo
+        - Key: Country Name
+          Value: PH
+        - Key: Province Name
+          Value: Metro Manila
+        - Key: Locality Name
+          Value: San Juan City
+        - Key: Author
+          Value: SSI Tech
+
+  # NACL Inbound Rules
+  NetworkAclEntryInboundHTTPS:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref SagesoftHRISNetworkAcl
+      RuleNumber: 100
+      Protocol: 6
+      RuleAction: allow
+      PortRange:
+        From: 443
+        To: 443
+      CidrBlock: 0.0.0.0/0
+
+  NetworkAclEntryInboundHTTP:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref SagesoftHRISNetworkAcl
+      RuleNumber: 110
+      Protocol: 6
+      RuleAction: allow
+      PortRange:
+        From: 80
+        To: 80
+      CidrBlock: 0.0.0.0/0
+
+  NetworkAclEntryInboundEphemeral:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref SagesoftHRISNetworkAcl
+      RuleNumber: 120
+      Protocol: 6
+      RuleAction: allow
+      PortRange:
+        From: 1025
+        To: 65535
+      CidrBlock: 0.0.0.0/0
+
+  NetworkAclEntryInboundVPC:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref SagesoftHRISNetworkAcl
+      RuleNumber: 130
+      Protocol: -1
+      RuleAction: allow
+      CidrBlock: 10.0.0.0/26
+
+  # NACL Outbound Rules
+  NetworkAclEntryOutboundHTTPS:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref SagesoftHRISNetworkAcl
+      RuleNumber: 100
+      Protocol: 6
+      RuleAction: allow
+      Egress: true
+      PortRange:
+        From: 443
+        To: 443
+      CidrBlock: 0.0.0.0/0
+
+  NetworkAclEntryOutboundHTTP:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref SagesoftHRISNetworkAcl
+      RuleNumber: 110
+      Protocol: 6
+      RuleAction: allow
+      Egress: true
+      PortRange:
+        From: 80
+        To: 80
+      CidrBlock: 0.0.0.0/0
+
+  NetworkAclEntryOutboundEphemeral:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref SagesoftHRISNetworkAcl
+      RuleNumber: 120
+      Protocol: 6
+      RuleAction: allow
+      Egress: true
+      PortRange:
+        From: 1025
+        To: 65535
+      CidrBlock: 0.0.0.0/0
+
+  NetworkAclEntryOutboundVPC:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref SagesoftHRISNetworkAcl
+      RuleNumber: 130
+      Protocol: -1
+      RuleAction: allow
+      Egress: true
+      CidrBlock: 10.0.0.0/26
+
+  # Security Groups
+  WebServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: sagesoft-hris-production-ec2-sg
+      GroupDescription: sagesoft-hris-production-ec2-sg
+      VpcId: !Ref SagesoftHRISVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 10.0.0.0/26
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.0.0.0/26
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 10.0.0.0/26
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 10.0.0.0/26
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/26
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          CidrIp: 10.0.0.0/26
+        - IpProtocol: -1
+          CidrIp: 10.0.0.0/26
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-ec2-sg
+        - Key: Organization
+          Value: Sagesoft
+        - Key: Environment
+          Value: Demo
+        - Key: Country Name
+          Value: PH
+        - Key: Province Name
+          Value: Metro Manila
+        - Key: Locality Name
+          Value: San Juan City
+        - Key: Author
+          Value: SSI Tech
+
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: sagesoft-hris-production-lb-sg
+      GroupDescription: sagesoft-hris-production-lb-sg
+      VpcId: !Ref SagesoftHRISVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/26
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 10.0.0.0/26
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-lb-sg
+        - Key: Organization
+          Value: Sagesoft
+        - Key: Environment
+          Value: Demo
+        - Key: Country Name
+          Value: PH
+        - Key: Province Name
+          Value: Metro Manila
+        - Key: Locality Name
+          Value: San Juan City
+        - Key: Author
+          Value: SSI Tech
+
+  AutoScalingGroupSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: sagesoft-hris-production-asg-sg
+      GroupDescription: sagesoft-hris-production-asg-sg
+      VpcId: !Ref SagesoftHRISVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 10.0.0.0/26
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          CidrIp: 10.0.0.0/26
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 10.0.0.0/26
+        - IpProtocol: tcp
+          FromPort: 2049
+          ToPort: 2049
+          CidrIp: 10.0.0.0/26
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-asg-sg
+        - Key: Organization
+          Value: Sagesoft
+        - Key: Environment
+          Value: Demo
+        - Key: Country Name
+          Value: PH
+        - Key: Province Name
+          Value: Metro Manila
+        - Key: Locality Name
+          Value: San Juan City
+        - Key: Author
+          Value: SSI Tech
+
+  ElasticFileSystemSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: sagesoft-hris-production-efs-sg
+      GroupDescription: sagesoft-hris-production-efs-sg
+      VpcId: !Ref SagesoftHRISVPC
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          CidrIp: 10.0.0.0/26
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-efs-sg
+        - Key: Organization
+          Value: Sagesoft
+        - Key: Environment
+          Value: Demo
+        - Key: Country Name
+          Value: PH
+        - Key: Province Name
+          Value: Metro Manila
+        - Key: Locality Name
+          Value: San Juan City
+        - Key: Author
+          Value: SSI Tech
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: sagesoft-hris-production-rds-sg
+      GroupDescription: sagesoft-hris-production-rds-sg
+      VpcId: !Ref SagesoftHRISVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 10.0.0.0/26
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-rds-sg
+        - Key: Organization
+          Value: Sagesoft
+        - Key: Environment
+          Value: Demo
+        - Key: Country Name
+          Value: PH
+        - Key: Province Name
+          Value: Metro Manila
+        - Key: Locality Name
+          Value: San Juan City
+        - Key: Author
+          Value: SSI Tech
+
+  # EFS
+  SagesoftHRISEFS:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      PerformanceMode: generalPurpose
+      ThroughputMode: bursting
+      Encrypted: true
+      FileSystemTags:
+        - Key: Name
+          Value: sagesoft-hris-production-efs
+        - Key: Organization
+          Value: Sagesoft
+        - Key: Environment
+          Value: Demo
+
+  # EFS Mount Targets
+  EFSMountTarget1:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref SagesoftHRISEFS
+      SubnetId: !Ref PrivateSubnet1
+      SecurityGroups:
+        - !Ref ElasticFileSystemSecurityGroup
+
+  EFSMountTarget2:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref SagesoftHRISEFS
+      SubnetId: !Ref PrivateSubnet2
+      SecurityGroups:
+        - !Ref ElasticFileSystemSecurityGroup
+
+  # RDS Subnet Group
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName: sagesoft-hris-production-rds-subnet-group
+      DBSubnetGroupDescription: Subnet group for Sagesoft HRIS RDS
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-rds-subnet-group
+
+  # RDS Instance from Snapshot
+  SagesoftHRISDatabase:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: sagesoft-hris-production-rds
+      DBSnapshotIdentifier: sagesoft-hris-production-rds-golden-image
+      DBInstanceClass: db.t3.micro
+      VPCSecurityGroups:
+        - !Ref DatabaseSecurityGroup
+      DBSubnetGroupName: !Ref RDSSubnetGroup
+      MultiAZ: false
+      PubliclyAccessible: false
+      StorageEncrypted: true
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-rds
+        - Key: Organization
+          Value: Sagesoft
+        - Key: Environment
+          Value: Demo
+
+  # EC2 Instance
+  SagesoftHRISEC2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: sagesoft-hris-production-ec2-GOLDEN-IMAGE-v2
+      InstanceType: t3.micro
+      KeyName: sagesoft-hris-production-ec2-pk.pem
+      SubnetId: !Ref PublicSubnet1
+      SecurityGroupIds:
+        - !Ref WebServerSecurityGroup
+      Tags:
+        - Key: Name
+          Value: sagesoft-hris-production-ec2
+        - Key: Organization
+          Value: Sagesoft
+        - Key: Environment
+          Value: Demo
+
+  # Load Balancer Target Group
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: ssi-roadshow-demo-tg
+      Protocol: HTTPS
+      Port: 443
+      VpcId: !Ref SagesoftHRISVPC
+      TargetType: instance
+      HealthCheckProtocol: HTTPS
+      HealthCheckPath: /
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Targets:
+        - Id: !Ref SagesoftHRISEC2
+          Port: 443
+      Tags:
+        - Key: Name
+          Value: ssi-roadshow-demo-tg
+        - Key: Organization
+          Value: Sagesoft Solutions Inc.
+        - Key: Environment
+          Value: Production
+
+  # Application Load Balancer
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: ssi-roadshow-demo-lb
+      Scheme: internet-facing
+      Type: application
+      IpAddressType: ipv4
+      SecurityGroups:
+        - !Ref LoadBalancerSecurityGroup
+      Subnets:
+        - !Ref PublicSubnet1
+        - !Ref PublicSubnet2
+      Tags:
+        - Key: Name
+          Value: ssi-roadshow-demo-lb
+        - Key: Organization
+          Value: Sagesoft Solutions Inc.
+        - Key: Environment
+          Value: Production
+        - Key: Country
+          Value: PH
+        - Key: Province
+          Value: Metro Manila
+        - Key: Locality
+          Value: San Juan City
+        - Key: Author
+          Value: SSI Tech
+
+  # ALB Listener
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref ACMCertificateArn
+
+  # WAF Association
+  WAFAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !Ref ApplicationLoadBalancer
+      WebACLArn: !Ref WebACLArn
+
+Outputs:
+  VPCId:
+    Description: VPC ID
+    Value: !Ref SagesoftHRISVPC
+    Export:
+      Name: !Sub ${AWS::StackName}-VPC-ID
+
+  WebServerSecurityGroupId:
+    Description: Web Server Security Group ID
+    Value: !Ref WebServerSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-WebServer-SG-ID
+
+  LoadBalancerSecurityGroupId:
+    Description: Load Balancer Security Group ID
+    Value: !Ref LoadBalancerSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-LoadBalancer-SG-ID
+
+  AutoScalingGroupSecurityGroupId:
+    Description: Auto Scaling Group Security Group ID
+    Value: !Ref AutoScalingGroupSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-ASG-SG-ID
+
+  ElasticFileSystemSecurityGroupId:
+    Description: EFS Security Group ID
+    Value: !Ref ElasticFileSystemSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-EFS-SG-ID
+
+  DatabaseSecurityGroupId:
+    Description: Database Security Group ID
+    Value: !Ref DatabaseSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-Database-SG-ID
+
+  LoadBalancerDNS:
+    Description: Application Load Balancer DNS Name
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+    Export:
+      Name: !Sub ${AWS::StackName}-ALB-DNS
+
+  EFSId:
+    Description: EFS File System ID
+    Value: !Ref SagesoftHRISEFS
+    Export:
+      Name: !Sub ${AWS::StackName}-EFS-ID
+
+  RDSEndpoint:
+    Description: RDS Database Endpoint
+    Value: !GetAtt SagesoftHRISDatabase.Endpoint.Address
+    Export:
+      Name: !Sub ${AWS::StackName}-RDS-Endpoint
