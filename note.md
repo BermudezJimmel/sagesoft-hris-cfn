@@ -130,3 +130,17 @@ Make ACM certificate ARN and Web ACL ARN parameters.
 * Default action: Allow.
 * Associate the Web ACL with the ALB (ssi-roadshow-demo-lb).
 * Tags: Organization=Sagesoft Solutions Inc., Name=ssi-roadshow-demo-waf, Environment=Production.
+
+
+ **Template Version**: Latest commit 3079ed0
+Some Edits: 
+- The CFN Template is now CREATE_COMPLETE, however the Site is not Accessible via Load Balancer, after the investigation and do some changes manually to work: 
+    - This must have in Load balancer Listener port 80 the redirect to 443 (Redirect to HTTPS://#{host}:443/#{path}?#{query}Status code: HTTP_301)
+    - Target group ssi-roadshow-demo-tg success code "200,302" and must be in Protocol : Port HTTP: 80
+    - By manually troublshooting the created EFS is not mounted in /mnt/efs-sessions, which I manually add in /etc/fstab "fs-063393f94a850e028.efs.us-east-2.amazonaws.com:/ /mnt/efs-sessions efs defaults,_netdev 0 0", can you add the createed new EFS here in fstab using user data? if yes please do. then lastly copy the files from this using these commands 
+        - sudo cp -r /mnt/laravel-sessions-backup /mnt/efs-sessions/.
+        - cd /mnt/efs-sessions/
+        - sudo mv laravel-sessions-backup laravel-sessions
+        - sudo chown apache:apache laravel-sessions/
+    - need to get the endpoint of RDS then change the DB_HOST="[using the created RDS Endpoint]", and edit in OS Level/App Level the ".env" file in /var/www/sagesoft-hris/.env just change the value in (DB_HOST="[using the created RDS Endpoint]")
+

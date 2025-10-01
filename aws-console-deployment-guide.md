@@ -5,32 +5,44 @@
 ### Prerequisites Checklist
 Before starting, ensure you have:
 - [ ] AWS Console access with CloudFormation permissions
-- [ ] ACM Certificate for `*.ssi-test.link` in Ohio region
 - [ ] AMI `ami-0ce40bd4273a45d61` available in Ohio
 - [ ] RDS Snapshot `sagesoft-hris-production-rds-golden-image` in Ohio
 - [ ] Key Pair `sagesoft-hris-production-ec2-pk` in Ohio
+- [ ] ACM Certificate `arn:aws:acm:us-east-2:870795464271:certificate/57ebe126-9b78-439b-930c-56b1d068774d`
 
 ---
 
-## Part 1: Get Your ACM Certificate ARN
+## Part 1: Verify Prerequisites
 
-### Option A: If Certificate Already Exists
+### Check AMI Availability
+1. **Navigate to EC2 Console**
+   - Go to AWS Console → Services → EC2
+   - Ensure you're in **Ohio (us-east-2)** region
+   - Go to Images → AMIs
+   - Search for: `ami-0ce40bd4273a45d61`
+   - Status should be **Available**
+
+### Check RDS Snapshot
+1. **Navigate to RDS Console**
+   - Go to AWS Console → Services → RDS
+   - Ensure you're in **Ohio (us-east-2)** region
+   - Go to Snapshots
+   - Find: `sagesoft-hris-production-rds-golden-image`
+   - Status should be **Available**
+
+### Check Key Pair
+1. **Navigate to EC2 Console**
+   - Go to Network & Security → Key Pairs
+   - Find: `sagesoft-hris-production-ec2-pk`
+   - Should be listed and available
+
+### Check ACM Certificate
 1. **Navigate to Certificate Manager**
    - Go to AWS Console → Services → Certificate Manager
    - Ensure you're in **Ohio (us-east-2)** region
-   - Find your `*.ssi-test.link` certificate
-   - Copy the **Certificate ARN** (starts with `arn:aws:acm:us-east-2:...`)
-
-### Option B: If Certificate Doesn't Exist
-1. **Request New Certificate**
-   - Go to Certificate Manager → Request a certificate
-   - Choose **Request a public certificate**
-   - Domain name: `*.ssi-test.link`
-   - Validation method: **DNS validation** (recommended)
-   - Click **Request**
-   - Follow DNS validation steps
-   - Wait for certificate to be **Issued** status
-   - Copy the **Certificate ARN**
+   - Find certificate with ID: `57ebe126-9b78-439b-930c-56b1d068774d`
+   - Status should be **Issued**
+   - Domain should be `*.ssi-test.link`
 
 ---
 
@@ -56,14 +68,11 @@ Before starting, ensure you have:
 1. **Stack Name**
    - Enter: `sagesoft-hris-production`
 
-2. **Parameters**
+2. **Parameters (All Pre-Configured)**
    - **AMIId**: `ami-0ce40bd4273a45d61` (pre-filled)
-   - **ACMCertificateArn**: Paste your certificate ARN from Part 1
+   - **ACMCertificateArn**: `arn:aws:acm:us-east-2:870795464271:certificate/57ebe126-9b78-439b-930c-56b1d068774d` (pre-filled)
    
-   Example:
-   ```
-   arn:aws:acm:us-east-2:123456789012:certificate/12345678-1234-1234-1234-123456789012
-   ```
+   **Note**: No parameter changes needed - all defaults are correct!
 
 3. **Click Next**
 
@@ -120,8 +129,9 @@ Resources will be created in this approximate order:
    - RDS instance from snapshot
 4. **EC2 Instance** (2-3 minutes)
    - EC2 with UserData script execution
+   - **Automated Configuration**: EFS mounting, session migration, database setup
 5. **Load Balancer** (3-5 minutes)
-   - ALB, Target Group, Listener
+   - ALB, Target Group, HTTP redirect listener, HTTPS listener
 6. **WAF** (1-2 minutes)
    - WAF Web ACL and association
 
@@ -131,7 +141,7 @@ Resources will be created in this approximate order:
 
 ---
 
-## Part 4: Verify Deployment
+## Part 4: Verify Deployment (Automated Features)
 
 ### Step 1: Check Stack Outputs
 1. **Navigate to Outputs Tab**
@@ -145,114 +155,112 @@ Resources will be created in this approximate order:
      - RDS Endpoint
      - WAF ARN
 
-### Step 2: Test Components
-1. **Load Balancer**
+### Step 2: Test Load Balancer (Production Configuration)
+1. **Get Load Balancer DNS**
    - Copy **LoadBalancerDNS** from outputs
-   - Test in browser: `https://[LoadBalancerDNS]`
-   - Should show your application or health check page
+   - Example: `ssi-roadshow-demo-lb-123456789.us-east-2.elb.amazonaws.com`
 
-2. **EC2 Instance**
+2. **Test HTTP Redirect**
+   - Browse to: `http://[LoadBalancerDNS]`
+   - Should automatically redirect to HTTPS with 301 status
+
+3. **Test HTTPS Application**
+   - Browse to: `https://[LoadBalancerDNS]`
+   - Should show your application with valid SSL certificate
+   - Check browser shows secure connection (lock icon)
+
+### Step 3: Verify Automated Configuration
+1. **EC2 Instance Status**
    - Go to EC2 Console
    - Find instance: `sagesoft-hris-production-ec2`
    - Status should be **Running**
 
-3. **RDS Database**
+2. **RDS Database**
    - Go to RDS Console
    - Find database: `sagesoft-hris-production-rds`
    - Status should be **Available**
 
----
+3. **EFS Mount (Automated)**
+   - EFS should be automatically mounted at `/mnt/efs-sessions`
+   - Laravel sessions automatically migrated to `/mnt/efs-sessions/laravel-sessions`
+   - Proper apache ownership set automatically
 
-## Part 5: Troubleshooting Common Issues
-
-### Issue 1: Certificate Not Found
-**Error**: `Certificate 'arn:aws:acm:...' not found`
-**Solution**: 
-- Verify certificate exists in Ohio region
-- Check certificate ARN is correct
-- Ensure certificate status is **Issued**
-
-### Issue 2: AMI Not Found
-**Error**: `Invalid id: "ami-..." (expecting "ami-...")`
-**Solution**:
-- Verify AMI exists in Ohio region
-- Check AMI ID is correct: `ami-0ce40bd4273a45d61`
-
-### Issue 3: Key Pair Not Found
-**Error**: `The key pair '...' does not exist`
-**Solution**:
-- Go to EC2 → Key Pairs
-- Verify `sagesoft-hris-production-ec2-pk` exists in Ohio
-
-### Issue 4: RDS Snapshot Not Found
-**Error**: `DBSnapshotIdentifier ... does not exist`
-**Solution**:
-- Go to RDS → Snapshots
-- Verify `sagesoft-hris-production-rds-golden-image` exists in Ohio
-
-### Issue 5: Stack Rollback
-**If stack creation fails**:
-1. Check **Events** tab for specific error
-2. Fix the issue (certificate, AMI, etc.)
-3. Delete the failed stack
-4. Create new stack with corrected parameters
+4. **Database Connection (Automated)**
+   - `.env` file automatically updated with RDS endpoint
+   - Web server automatically restarted
+   - Application should connect to database without manual configuration
 
 ---
 
-## Part 6: Post-Deployment Steps
+## Part 5: Application Verification
 
-### Step 1: Update DNS (If Needed)
-1. **Get Load Balancer DNS**
-   - From CloudFormation Outputs tab
-   - Example: `ssi-roadshow-demo-lb-123456789.us-east-2.elb.amazonaws.com`
+### Step 1: Test Application Functionality
+1. **Access Application**
+   - Use Load Balancer DNS: `https://[LoadBalancerDNS]`
+   - Application should load completely
+   - Database connectivity should work
+   - Session management should function
 
-2. **Update DNS Records**
-   - Point your domain to the Load Balancer DNS
-   - Create CNAME record: `app.ssi-test.link` → `[LoadBalancerDNS]`
+2. **Verify SSL Certificate**
+   - Browser should show secure connection
+   - Certificate should be valid for `*.ssi-test.link`
+   - No SSL warnings or errors
 
-### Step 2: Verify Application
-1. **Test Application Access**
-   - Browse to your domain: `https://app.ssi-test.link`
-   - Verify SSL certificate is working
-   - Check application functionality
+### Step 2: Health Check Verification
+1. **Target Group Health**
+   - Go to EC2 → Load Balancers → Target Groups
+   - Find: `ssi-roadshow-demo-tg`
+   - Target should show **Healthy** status
+   - Health check should pass with 200 or 302 response
 
-2. **Verify EFS Mount**
-   - SSH to EC2 instance
-   - Check: `df -h | grep efs`
-   - Verify: `/mnt/efs-sessions` is mounted
-   - Check: `/mnt/efs-sessions/laravel-session` exists
+---
 
-### Step 3: Monitor Resources
+## Part 6: Troubleshooting (Rare Issues)
+
+### Issue 1: Stack Creation Fails
+**Most Common Causes**:
+- AMI not available in Ohio region
+- RDS snapshot not available in Ohio region
+- Key pair doesn't exist in Ohio region
+- ACM certificate not issued or wrong ARN
+
+**Solution**: Verify all prerequisites exist in Ohio region
+
+### Issue 2: Application Not Accessible
+**Check These**:
+1. **Security Groups**: Ensure ALB security group allows HTTP/HTTPS from internet
+2. **Target Group Health**: Check if EC2 instance is healthy in target group
+3. **EC2 Instance**: Verify instance is running and web server is active
+
+### Issue 3: SSL Certificate Issues
+**Verify**:
+- Certificate status is **Issued** in ACM
+- Certificate covers `*.ssi-test.link` domain
+- Certificate is in Ohio (us-east-2) region
+
+---
+
+## Part 7: Post-Deployment (Optional)
+
+### Step 1: Custom Domain Setup
+1. **Update DNS Records**
+   - Point your domain to Load Balancer DNS
+   - Create CNAME: `app.ssi-test.link` → `[LoadBalancerDNS]`
+
+2. **Test Custom Domain**
+   - Browse to: `https://app.ssi-test.link`
+   - Should work with valid SSL certificate
+
+### Step 2: Monitoring Setup
 1. **CloudWatch Metrics**
-   - Check ALB metrics
-   - Monitor EC2 performance
-   - Review RDS metrics
+   - ALB metrics for request count and latency
+   - EC2 metrics for CPU and memory usage
+   - RDS metrics for database performance
 
 2. **WAF Monitoring**
    - Go to WAF Console
    - Check `ssi-roadshow-demo-waf`
-   - Monitor blocked/allowed requests
-
----
-
-## Quick Reference Commands
-
-### Get Certificate ARN
-```bash
-aws acm list-certificates --region us-east-2
-```
-
-### Verify Resources Exist
-```bash
-# Check AMI
-aws ec2 describe-images --image-ids ami-0ce40bd4273a45d61 --region us-east-2
-
-# Check Key Pair
-aws ec2 describe-key-pairs --key-names sagesoft-hris-production-ec2-pk --region us-east-2
-
-# Check RDS Snapshot
-aws rds describe-db-snapshots --db-snapshot-identifier sagesoft-hris-production-rds-golden-image --region us-east-2
-```
+   - Monitor allowed/blocked requests
 
 ---
 
@@ -261,9 +269,24 @@ aws rds describe-db-snapshots --db-snapshot-identifier sagesoft-hris-production-
 ✅ **Deployment Successful When**:
 - Stack status: `CREATE_COMPLETE`
 - All outputs populated
-- Load Balancer DNS accessible via HTTPS
-- EC2 instance running
-- RDS database available
-- EFS mounted on EC2
+- HTTP redirects to HTTPS automatically
+- HTTPS serves application with valid SSL
+- Target group shows healthy targets
+- Application functions completely
+- Database connectivity works
+- Session management operational
 
-🎉 **Your Sagesoft HRIS infrastructure is now live!**
+## Automated Features Working
+
+✅ **These Work Automatically (No Manual Setup)**:
+- EFS mounting with proper fstab entry
+- Laravel session migration and configuration
+- Database endpoint configuration in application
+- Web server restart and configuration application
+- HTTP to HTTPS redirect
+- SSL certificate installation
+- Target group health checks with 200/302 codes
+
+🎉 **Your Sagesoft HRIS infrastructure is now fully operational!**
+
+**Total Setup Time**: 15-25 minutes with zero manual configuration required!
