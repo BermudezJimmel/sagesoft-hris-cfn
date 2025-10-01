@@ -557,9 +557,8 @@ Resources:
           mkdir -p /mnt/efs-sessions
           
           # Add EFS to fstab with the actual EFS ID
-          EFS_ID="${SagesoftHRISEFS}"
           if ! grep -q "/mnt/efs-sessions" /etc/fstab; then
-            echo "$${EFS_ID}.efs.${AWS::Region}.amazonaws.com:/ /mnt/efs-sessions efs defaults,_netdev 0 0" >> /etc/fstab
+            echo "${SagesoftHRISEFS}.efs.${AWS::Region}.amazonaws.com:/ /mnt/efs-sessions efs defaults,_netdev 0 0" >> /etc/fstab
           fi
           
           # Mount EFS
