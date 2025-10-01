@@ -9,8 +9,8 @@ Parameters:
   
   ACMCertificateArn:
     Type: String
-    Description: ARN of the ACM certificate for *.ssi-test.link
-    Default: arn:aws:acm:us-east-2:123456789012:certificate/57ebe126-9b78-439b-930c-56b1d068774d
+    Description: ARN of the ACM certificate for *.ssi-test.link in Ohio region
+    ConstraintDescription: Must be a valid ACM certificate ARN in us-east-2
 
 Resources:
   # VPC Section
