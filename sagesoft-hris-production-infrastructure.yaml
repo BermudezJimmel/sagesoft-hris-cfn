@@ -554,6 +554,32 @@ Resources:
       SubnetId: !Ref PublicSubnet1
       SecurityGroupIds:
         - !Ref WebServerSecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          yum install -y amazon-efs-utils
+          
+          # Create EFS mount directory
+          mkdir -p /mnt/efs-sessions
+          
+          # Mount EFS
+          echo "${SagesoftHRISEFS}.efs.${AWS::Region}.amazonaws.com:/ /mnt/efs-sessions efs defaults,_netdev" >> /etc/fstab
+          mount -a
+          
+          # Wait for mount to be ready
+          sleep 10
+          
+          # Copy laravel-sessions-backup to EFS and rename
+          if [ -d "/mnt/laravel-sessions-backup" ]; then
+            cp -r /mnt/laravel-sessions-backup /mnt/efs-sessions/laravel-session
+            echo "Laravel sessions backup copied to EFS successfully"
+          else
+            echo "Warning: /mnt/laravel-sessions-backup directory not found"
+          fi
+          
+          # Set proper permissions
+          chown -R apache:apache /mnt/efs-sessions/laravel-session 2>/dev/null || chown -R www-data:www-data /mnt/efs-sessions/laravel-session 2>/dev/null || true
       Tags:
         - Key: Name
           Value: sagesoft-hris-production-ec2
