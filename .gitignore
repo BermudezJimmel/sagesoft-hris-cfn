@@ -1,0 +1,19 @@
+# Security - Never commit private keys
+*.pem
+*.key
+*.p12
+*.pfx
+
+# AWS Credentials
+.aws/
+credentials
+config
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Temporary files
+*.tmp
+*.log
