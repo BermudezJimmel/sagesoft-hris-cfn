@@ -6,6 +6,11 @@ Parameters:
     Type: String
     Description: AMI ID for the EC2 instance (sagesoft-hris-production-ec2-GOLDEN-IMAGE-v2)
     Default: ami-0ce40bd4273a45d61
+  
+  ACMCertificateArn:
+    Type: String
+    Description: ARN of the ACM certificate for *.ssi-test.link in Ohio region
+    Default: arn:aws:acm:us-east-2:123456789012:certificate/57ebe126-9b78-439b-930c-56b1d068774d
 
 Resources:
   # VPC Section
@@ -584,11 +589,11 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: ssi-roadshow-demo-tg
-      Protocol: HTTP
-      Port: 80
+      Protocol: HTTPS
+      Port: 443
       VpcId: !Ref SagesoftHRISVPC
       TargetType: instance
-      HealthCheckProtocol: HTTP
+      HealthCheckProtocol: HTTPS
       HealthCheckPath: /
       HealthCheckIntervalSeconds: 30
       HealthCheckTimeoutSeconds: 5
@@ -596,7 +601,7 @@ Resources:
       UnhealthyThresholdCount: 3
       Targets:
         - Id: !Ref SagesoftHRISEC2
-          Port: 80
+          Port: 443
       Tags:
         - Key: Name
           Value: ssi-roadshow-demo-tg
@@ -642,8 +647,10 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref ALBTargetGroup
       LoadBalancerArn: !Ref ApplicationLoadBalancer
-      Port: 80
-      Protocol: HTTP
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref ACMCertificateArn
 
   # WAF Web ACL
   SSIRoadshowDemoWAF:
