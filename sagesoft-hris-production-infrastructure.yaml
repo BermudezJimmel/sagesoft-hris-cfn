@@ -4,13 +4,13 @@ Description: 'Sagesoft HRIS Production Infrastructure - Complete Stack'
 Parameters:
   AMIId:
     Type: String
-    Description: AMI ID for the EC2 instance (sagesoft-hris-production-ec2-GOLDEN-IMAGE-v2)
-    Default: ami-0ce40bd4273a45d61
+    Description: AMI ID for the EC2 instance (region-specific)
+    ConstraintDescription: Must be a valid AMI ID in the deployment region
   
   ACMCertificateArn:
     Type: String
     Description: ARN of the ACM certificate for *.ssi-test.link
-    Default: arn:aws:acm:us-east-2:123456789012:certificate/57ebe126-9b78-439b-930c-56b1d068774d
+    ConstraintDescription: Must be a valid ACM certificate ARN in the deployment region
 
 Resources:
   # VPC Section
@@ -662,20 +662,8 @@ Resources:
       DefaultAction:
         Allow: {}
       Rules:
-        - Name: AWSManagedRulesAmazonIpReputationList
-          Priority: 1
-          OverrideAction:
-            None: {}
-          Statement:
-            ManagedRuleGroupStatement:
-              VendorName: AWS
-              Name: AWSManagedRulesAmazonIpReputationList
-          VisibilityConfig:
-            SampledRequestsEnabled: true
-            CloudWatchMetricsEnabled: true
-            MetricName: AmazonIpReputationListMetric
         - Name: AWSManagedRulesCoreRuleSet
-          Priority: 2
+          Priority: 1
           OverrideAction:
             None: {}
           Statement:
@@ -686,42 +674,18 @@ Resources:
             SampledRequestsEnabled: true
             CloudWatchMetricsEnabled: true
             MetricName: CoreRuleSetMetric
-        - Name: AWSManagedRulesKnownBadInputsRuleSet
-          Priority: 3
+        - Name: AWSManagedRulesAmazonIpReputationList
+          Priority: 2
           OverrideAction:
             None: {}
           Statement:
             ManagedRuleGroupStatement:
               VendorName: AWS
-              Name: AWSManagedRulesKnownBadInputsRuleSet
+              Name: AWSManagedRulesAmazonIpReputationList
           VisibilityConfig:
             SampledRequestsEnabled: true
             CloudWatchMetricsEnabled: true
-            MetricName: KnownBadInputsMetric
-        - Name: AWSManagedRulesLinuxRuleSet
-          Priority: 4
-          OverrideAction:
-            None: {}
-          Statement:
-            ManagedRuleGroupStatement:
-              VendorName: AWS
-              Name: AWSManagedRulesLinuxRuleSet
-          VisibilityConfig:
-            SampledRequestsEnabled: true
-            CloudWatchMetricsEnabled: true
-            MetricName: LinuxRuleSetMetric
-        - Name: AWSManagedRulesPHPRuleSet
-          Priority: 5
-          OverrideAction:
-            None: {}
-          Statement:
-            ManagedRuleGroupStatement:
-              VendorName: AWS
-              Name: AWSManagedRulesPHPRuleSet
-          VisibilityConfig:
-            SampledRequestsEnabled: true
-            CloudWatchMetricsEnabled: true
-            MetricName: PHPRuleSetMetric
+            MetricName: AmazonIpReputationListMetric
       VisibilityConfig:
         SampledRequestsEnabled: true
         CloudWatchMetricsEnabled: true
