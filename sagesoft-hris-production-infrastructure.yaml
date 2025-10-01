@@ -551,7 +551,7 @@ Resources:
     Properties:
       ImageId: !Ref AMIId
       InstanceType: t3.micro
-      KeyName: sagesoft-hris-production-ec2-pk.pem
+      KeyName: sagesoft-hris-production-ec2-pk
       SubnetId: !Ref PublicSubnet1
       SecurityGroupIds:
         - !Ref WebServerSecurityGroup
