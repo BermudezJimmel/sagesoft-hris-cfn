@@ -553,28 +553,45 @@ Resources:
         Fn::Base64: !Sub |
           #!/bin/bash
           
-          # Ensure EFS mount directory exists (safe if already exists)
+          # Ensure EFS mount directory exists
           mkdir -p /mnt/efs-sessions
           
-          # Check if EFS is already mounted, if not mount it
+          # Add EFS to fstab with the actual EFS ID
+          EFS_ID="${SagesoftHRISEFS}"
+          if ! grep -q "/mnt/efs-sessions" /etc/fstab; then
+            echo "$${EFS_ID}.efs.${AWS::Region}.amazonaws.com:/ /mnt/efs-sessions efs defaults,_netdev 0 0" >> /etc/fstab
+          fi
+          
+          # Mount EFS
           if ! mountpoint -q /mnt/efs-sessions; then
-            # Add to fstab if not already present
-            if ! grep -q "/mnt/efs-sessions" /etc/fstab; then
-              echo "${SagesoftHRISEFS}.efs.${AWS::Region}.amazonaws.com:/ /mnt/efs-sessions efs defaults,_netdev" >> /etc/fstab
-            fi
             mount /mnt/efs-sessions
             sleep 5
           fi
           
-          # Copy laravel-sessions-backup to EFS only if source exists and target doesn't
-          if [ -d "/mnt/laravel-sessions-backup" ] && [ ! -d "/mnt/efs-sessions/laravel-session" ]; then
-            cp -r /mnt/laravel-sessions-backup /mnt/efs-sessions/laravel-session
-            echo "Laravel sessions backup copied to EFS successfully"
+          # Copy and rename Laravel sessions
+          if [ -d "/mnt/laravel-sessions-backup" ] && [ ! -d "/mnt/efs-sessions/laravel-sessions" ]; then
+            cp -r /mnt/laravel-sessions-backup /mnt/efs-sessions/.
+            cd /mnt/efs-sessions/
+            mv laravel-sessions-backup laravel-sessions
+            chown -R apache:apache laravel-sessions/
+            echo "Laravel sessions copied and configured successfully"
+          fi
+          
+          # Update .env file with RDS endpoint
+          RDS_ENDPOINT="${SagesoftHRISDatabase.Endpoint.Address}"
+          ENV_FILE="/var/www/sagesoft-hris/.env"
+          if [ -f "$ENV_FILE" ]; then
+            # Backup original .env file
+            cp $ENV_FILE $ENV_FILE.backup
             
-            # Set proper permissions
-            chown -R apache:apache /mnt/efs-sessions/laravel-session 2>/dev/null || chown -R www-data:www-data /mnt/efs-sessions/laravel-session 2>/dev/null || true
+            # Update DB_HOST with RDS endpoint
+            sed -i "s/^DB_HOST=.*/DB_HOST=\"$RDS_ENDPOINT\"/" $ENV_FILE
+            echo "Updated .env file with RDS endpoint: $RDS_ENDPOINT"
+            
+            # Restart web server to apply changes
+            systemctl restart httpd 2>/dev/null || systemctl restart apache2 2>/dev/null || service httpd restart 2>/dev/null || service apache2 restart 2>/dev/null
           else
-            echo "Laravel session directory already exists in EFS or source backup not found"
+            echo "Warning: .env file not found at $ENV_FILE"
           fi
       Tags:
         - Key: Name
@@ -589,19 +606,21 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       Name: ssi-roadshow-demo-tg
-      Protocol: HTTPS
-      Port: 443
+      Protocol: HTTP
+      Port: 80
       VpcId: !Ref SagesoftHRISVPC
       TargetType: instance
-      HealthCheckProtocol: HTTPS
+      HealthCheckProtocol: HTTP
       HealthCheckPath: /
       HealthCheckIntervalSeconds: 30
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 3
+      Matcher:
+        HttpCode: "200,302"
       Targets:
         - Id: !Ref SagesoftHRISEC2
-          Port: 443
+          Port: 80
       Tags:
         - Key: Name
           Value: ssi-roadshow-demo-tg
@@ -639,7 +658,24 @@ Resources:
         - Key: Author
           Value: SSI Tech
 
-  # ALB Listener
+  # ALB HTTP Redirect Listener
+  ALBHTTPListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Protocol: HTTPS
+            Port: 443
+            Host: "#{host}"
+            Path: "/#{path}"
+            Query: "#{query}"
+            StatusCode: HTTP_301
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  # ALB HTTPS Listener
   ALBListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
