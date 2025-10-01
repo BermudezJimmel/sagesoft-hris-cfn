@@ -2,6 +2,11 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: 'Sagesoft HRIS Production Infrastructure - Complete Stack'
 
 Parameters:
+  AMIId:
+    Type: String
+    Description: AMI ID for the EC2 instance (sagesoft-hris-production-ec2-GOLDEN-IMAGE-v2)
+    Default: ami-0abcdef1234567890
+  
   ACMCertificateArn:
     Type: String
     Description: ARN of the ACM certificate for *.ssi-test.link
@@ -544,7 +549,7 @@ Resources:
   SagesoftHRISEC2:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: sagesoft-hris-production-ec2-GOLDEN-IMAGE-v2
+      ImageId: !Ref AMIId
       InstanceType: t3.micro
       KeyName: sagesoft-hris-production-ec2-pk.pem
       SubnetId: !Ref PublicSubnet1
