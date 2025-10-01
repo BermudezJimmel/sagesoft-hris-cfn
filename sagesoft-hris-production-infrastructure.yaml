@@ -557,29 +557,30 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          yum update -y
-          yum install -y amazon-efs-utils
           
-          # Create EFS mount directory
+          # Ensure EFS mount directory exists (safe if already exists)
           mkdir -p /mnt/efs-sessions
           
-          # Mount EFS
-          echo "${SagesoftHRISEFS}.efs.${AWS::Region}.amazonaws.com:/ /mnt/efs-sessions efs defaults,_netdev" >> /etc/fstab
-          mount -a
-          
-          # Wait for mount to be ready
-          sleep 10
-          
-          # Copy laravel-sessions-backup to EFS and rename
-          if [ -d "/mnt/laravel-sessions-backup" ]; then
-            cp -r /mnt/laravel-sessions-backup /mnt/efs-sessions/laravel-session
-            echo "Laravel sessions backup copied to EFS successfully"
-          else
-            echo "Warning: /mnt/laravel-sessions-backup directory not found"
+          # Check if EFS is already mounted, if not mount it
+          if ! mountpoint -q /mnt/efs-sessions; then
+            # Add to fstab if not already present
+            if ! grep -q "/mnt/efs-sessions" /etc/fstab; then
+              echo "${SagesoftHRISEFS}.efs.${AWS::Region}.amazonaws.com:/ /mnt/efs-sessions efs defaults,_netdev" >> /etc/fstab
+            fi
+            mount /mnt/efs-sessions
+            sleep 5
           fi
           
-          # Set proper permissions
-          chown -R apache:apache /mnt/efs-sessions/laravel-session 2>/dev/null || chown -R www-data:www-data /mnt/efs-sessions/laravel-session 2>/dev/null || true
+          # Copy laravel-sessions-backup to EFS only if source exists and target doesn't
+          if [ -d "/mnt/laravel-sessions-backup" ] && [ ! -d "/mnt/efs-sessions/laravel-session" ]; then
+            cp -r /mnt/laravel-sessions-backup /mnt/efs-sessions/laravel-session
+            echo "Laravel sessions backup copied to EFS successfully"
+            
+            # Set proper permissions
+            chown -R apache:apache /mnt/efs-sessions/laravel-session 2>/dev/null || chown -R www-data:www-data /mnt/efs-sessions/laravel-session 2>/dev/null || true
+          else
+            echo "Laravel session directory already exists in EFS or source backup not found"
+          fi
       Tags:
         - Key: Name
           Value: sagesoft-hris-production-ec2
